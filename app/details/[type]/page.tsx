@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getFinancialPeriod } from "@/lib/financial-period";
@@ -38,7 +38,13 @@ function dateFromString(value: string) {
   return new Date(year, month - 1, day);
 }
 
-export default function TransactionDetailsPage() {
+const loadingPeriod = {
+  startDate: "",
+  endDate: "",
+  label: "Loading financial month...",
+};
+
+function TransactionDetailsContent() {
   const params = useParams<{ type: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,6 +52,7 @@ export default function TransactionDetailsPage() {
   const type = decodeURIComponent(params.type);
   const [user, setUser] = useState<User | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [currentCycleStart, setCurrentCycleStart] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -77,6 +84,9 @@ export default function TransactionDetailsPage() {
       }
 
       setUser(currentUser);
+      setCurrentCycleStart(
+        getFinancialPeriod(currentUser.cycleStartDay).startDate,
+      );
 
       const response = await fetch("/api/transactions", {
         cache: "no-store",
@@ -109,13 +119,15 @@ export default function TransactionDetailsPage() {
   }, [type, load, router]);
 
   const period = useMemo(() => {
-    const cycleStart = searchParams.get("cycleStart");
+    const cycleStart = searchParams.get("cycleStart") || currentCycleStart;
+
+    if (!cycleStart) return loadingPeriod;
 
     return getFinancialPeriod(
       user?.cycleStartDay ?? 26,
-      cycleStart ? dateFromString(cycleStart) : new Date(),
+      dateFromString(cycleStart),
     );
-  }, [searchParams, user?.cycleStartDay]);
+  }, [currentCycleStart, searchParams, user?.cycleStartDay]);
 
   const periodTransactions = useMemo(
     () =>
@@ -360,5 +372,13 @@ export default function TransactionDetailsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function TransactionDetailsPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-slate-500">Loading transactions...</p>}>
+      <TransactionDetailsContent />
+    </Suspense>
   );
 }

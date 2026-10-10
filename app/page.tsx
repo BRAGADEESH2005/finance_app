@@ -84,6 +84,12 @@ function money(amount: number) {
   });
 }
 
+const loadingPeriod = {
+  startDate: "",
+  endDate: "",
+  label: "Loading financial month...",
+};
+
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -160,14 +166,14 @@ export default function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const financialPeriod = useMemo(
-    () =>
-      getFinancialPeriod(
-        user?.cycleStartDay ?? 26,
-        selectedCycleStart ? dateFromString(selectedCycleStart) : new Date(),
-      ),
-    [selectedCycleStart, user?.cycleStartDay],
-  );
+  const financialPeriod = useMemo(() => {
+    if (!selectedCycleStart) return loadingPeriod;
+
+    return getFinancialPeriod(
+      user?.cycleStartDay ?? 26,
+      dateFromString(selectedCycleStart),
+    );
+  }, [selectedCycleStart, user?.cycleStartDay]);
 
   const periodTransactions = useMemo(
     () =>
