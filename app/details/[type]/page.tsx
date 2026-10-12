@@ -4,6 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getFinancialPeriod } from "@/lib/financial-period";
+import MobileNav from "@/components/mobile-nav";
+import LoadingState from "@/components/loading-state";
 
 type Kind = "Income" | "Expense" | "Investment";
 
@@ -55,6 +57,10 @@ function TransactionDetailsContent() {
   const [currentCycleStart, setCurrentCycleStart] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -63,20 +69,20 @@ function TransactionDetailsContent() {
     setError("");
 
     try {
-      const userResponse = await fetch("/api/auth/me", {
-        cache: "no-store",
-      });
+      const response = await fetch("/api/dashboard");
 
-      if (userResponse.status === 401) {
+      if (response.status === 401) {
         router.replace("/login");
         return;
       }
 
-      if (!userResponse.ok) {
+      if (!response.ok) {
         throw new Error("Unable to load your account.");
       }
 
-      const currentUser: User = await userResponse.json();
+      const result: { user: User; transactions: Transaction[] } =
+        await response.json();
+      const currentUser = result.user;
 
       if (!currentUser.onboardingComplete) {
         router.replace("/onboarding");
@@ -88,26 +94,42 @@ function TransactionDetailsContent() {
         getFinancialPeriod(currentUser.cycleStartDay).startDate,
       );
 
-      const response = await fetch("/api/transactions", {
-        cache: "no-store",
-      });
-
-      if (response.status === 401) {
-        router.replace("/login");
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Unable to load transactions.");
-      }
-
-      setTransactions(await response.json());
+      setTransactions(result.transactions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }, [router]);
+
+  const loadDateFilteredTransactions = useCallback(async () => {
+    if (!dateFrom && !dateTo) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const query = new URLSearchParams({ page: "1", pageSize: "100" });
+      if (dateFrom) query.set("startDate", dateFrom);
+      if (dateTo) query.set("endDate", dateTo);
+      if (type !== "All" && type !== "Unallocated") query.set("kind", type);
+
+      const response = await fetch(`/api/transactions?${query.toString()}`);
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!response.ok) throw new Error("Unable to filter transactions.");
+
+      const result = await response.json();
+      setTransactions(result.transactions);
+      setHasMore(result.pagination.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not filter transactions.");
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo, router, type]);
 
   useEffect(() => {
     if (!validTypes.includes(type)) {
@@ -117,6 +139,13 @@ function TransactionDetailsContent() {
 
     void load();
   }, [type, load, router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (dateFrom || dateTo) void loadDateFilteredTransactions();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [dateFrom, dateTo, loadDateFilteredTransactions]);
 
   const period = useMemo(() => {
     const cycleStart = searchParams.get("cycleStart") || currentCycleStart;
@@ -178,8 +207,16 @@ function TransactionDetailsContent() {
     const searchText =
       `${t.category} ${t.note} ${t.date} ${t.kind}`.toLowerCase();
     const matchesSearch = searchText.includes(search.toLowerCase());
+    const matchesStartDate = !dateFrom || t.date >= dateFrom;
+    const matchesEndDate = !dateTo || t.date <= dateTo;
 
-    return matchesType && matchesCategory && matchesSearch;
+    return (
+      matchesType &&
+      matchesCategory &&
+      matchesSearch &&
+      matchesStartDate &&
+      matchesEndDate
+    );
   });
 
   const title =
@@ -198,12 +235,6 @@ function TransactionDetailsContent() {
     {},
   );
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
-  }
-
   async function deleteTransaction(id: string) {
     if (!window.confirm("Delete this transaction?")) return;
 
@@ -221,28 +252,34 @@ function TransactionDetailsContent() {
     setTransactions((previous) => previous.filter((t) => t.id !== id));
   }
 
+  async function loadMore() {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const query = new URLSearchParams({
+        page: String(Math.floor(transactions.length / 100) + 1),
+        pageSize: "100",
+      });
+      if (dateFrom) query.set("startDate", dateFrom);
+      if (dateTo) query.set("endDate", dateTo);
+      if (type !== "All" && type !== "Unallocated") query.set("kind", type);
+
+      const response = await fetch(`/api/transactions?${query.toString()}`);
+      if (!response.ok) throw new Error("Could not load more transactions.");
+      const result = await response.json();
+      setTransactions((current) => [...current, ...result.transactions]);
+      setHasMore(result.pagination.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load more transactions.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-          <div>
-            <p className="text-xs font-bold tracking-widest text-emerald-700">
-              MY FINANCE
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              {user ? `Welcome, ${user.username}` : "Your finances"}
-            </p>
-          </div>
-          <button
-            onClick={logout}
-            className="rounded-lg border px-4 py-2 text-sm font-semibold"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl space-y-6 px-5 py-8">
+      <MobileNav />
+      <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 pb-24 sm:space-y-6 sm:px-5 sm:py-8 sm:pb-8">
         <Link href="/" className="text-sm font-semibold text-emerald-700">
           ← Back to dashboard
         </Link>
@@ -305,7 +342,7 @@ function TransactionDetailsContent() {
         <section className="rounded-2xl border bg-white p-5">
           <h2 className="font-bold">Transaction history</h2>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -323,7 +360,42 @@ function TransactionDetailsContent() {
                 <option key={category}>{category}</option>
               ))}
             </select>
+            <label className="text-xs font-medium text-slate-500">
+              From
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-3 text-sm font-normal text-slate-900"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-500">
+              To
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="mt-1 w-full rounded-lg border px-3 py-3 text-sm font-normal text-slate-900"
+              />
+            </label>
           </div>
+          {(dateFrom || dateTo || search || categoryFilter !== "All") && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+                setSearch("");
+                setCategoryFilter("All");
+                void load();
+              }}
+              className="mt-3 text-sm font-semibold text-emerald-700 hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
 
           {loading ? (
             <p className="py-8 text-sm text-slate-500">
@@ -369,6 +441,16 @@ function TransactionDetailsContent() {
               ))}
             </div>
           )}
+          {hasMore && !loading && (
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="mt-4 w-full rounded-lg border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+            >
+              {loadingMore ? "Loading more..." : "Load more transactions"}
+            </button>
+          )}
         </section>
       </div>
     </main>
@@ -377,7 +459,7 @@ function TransactionDetailsContent() {
 
 export default function TransactionDetailsPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-sm text-slate-500">Loading transactions...</p>}>
+    <Suspense fallback={<LoadingState label="Loading transactions..." />}>
       <TransactionDetailsContent />
     </Suspense>
   );

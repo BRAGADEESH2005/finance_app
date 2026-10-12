@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getFinancialPeriod } from "@/lib/financial-period";
+import MobileNav from "@/components/mobile-nav";
+import LoadingState from "@/components/loading-state";
 
 type Kind = "Income" | "Expense" | "Investment";
 
@@ -115,20 +117,20 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const userResponse = await fetch("/api/auth/me", {
-        cache: "no-store",
-      });
+      const response = await fetch("/api/dashboard");
 
-      if (userResponse.status === 401) {
+      if (response.status === 401) {
         router.replace("/login");
         return;
       }
 
-      if (!userResponse.ok) {
+      if (!response.ok) {
         throw new Error("Could not load your account.");
       }
 
-      const currentUser: User = await userResponse.json();
+      const result: { user: User; transactions: Transaction[] } =
+        await response.json();
+      const currentUser = result.user;
 
       if (!currentUser.onboardingComplete) {
         router.replace("/onboarding");
@@ -140,21 +142,7 @@ export default function DashboardPage() {
         getFinancialPeriod(currentUser.cycleStartDay).startDate,
       );
 
-      const transactionResponse = await fetch("/api/transactions", {
-        cache: "no-store",
-      });
-
-      if (transactionResponse.status === 401) {
-        router.replace("/login");
-        return;
-      }
-
-      if (!transactionResponse.ok) {
-        throw new Error("Could not load transactions.");
-      }
-
-      const result: Transaction[] = await transactionResponse.json();
-      setTransactions(result);
+      setTransactions(result.transactions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -299,12 +287,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
-  }
-
   const cards = [
     {
       title: "Total income",
@@ -340,30 +322,19 @@ export default function DashboardPage() {
     },
   ];
 
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <MobileNav />
+        <LoadingState />
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5">
-          <div>
-            <p className="text-xs font-bold tracking-[0.2em] text-emerald-700">
-              MY FINANCE
-            </p>
-            <h1 className="mt-1 text-2xl font-bold">Money dashboard</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {user ? `Welcome, ${user.username}` : "Your personal finances"}
-            </p>
-          </div>
-
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl space-y-8 px-5 py-8">
+    <main className="min-h-screen bg-slate-50 pb-24 text-slate-900 sm:pb-8">
+      <MobileNav />
+      <div className="mx-auto max-w-7xl space-y-5 px-4 py-5 sm:space-y-8 sm:px-5 sm:py-8">
         <section className="rounded-2xl bg-slate-900 p-6 text-white sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>

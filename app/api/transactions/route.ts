@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Transaction from "@/models/Transaction";
 import { getCurrentUser } from "@/lib/auth";
 
 const allowedKinds = ["Income", "Expense", "Investment"];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await getCurrentUser();
 
@@ -19,22 +18,60 @@ export async function GET() {
 
     await connectDB();
 
-    const transactions = await Transaction.find({
-      userId: user._id,
-    })
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(Number(searchParams.get("page") || 1), 1);
+    const pageSize = Math.min(
+      Math.max(Number(searchParams.get("pageSize") || 50), 1),
+      100,
+    );
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    const kind = searchParams.get("kind");
+    const search = searchParams.get("search")?.trim();
+    const query: Record<string, unknown> = { userId: user._id };
+
+    if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      query.date = { ...(query.date as object), $gte: startDate };
+    }
+    if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      query.date = { ...(query.date as object), $lte: endDate };
+    }
+    if (["Income", "Expense", "Investment"].includes(kind || "")) {
+      query.kind = kind;
+    }
+    if (search) {
+      query.$or = [
+        { category: { $regex: search, $options: "i" } },
+        { note: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [transactions, total] = await Promise.all([
+      Transaction.find(query)
       .sort({ date: -1, createdAt: -1 })
-      .limit(500)
-      .lean();
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      Transaction.countDocuments(query),
+    ]);
 
     return NextResponse.json(
-      transactions.map((t) => ({
-        id: String(t._id),
-        kind: t.kind,
-        amount: t.amount,
-        category: t.category,
-        date: t.date,
-        note: t.note,
-      }))
+      {
+        transactions: transactions.map((t) => ({
+          id: String(t._id),
+          kind: t.kind,
+          amount: t.amount,
+          category: t.category,
+          date: t.date,
+          note: t.note,
+        })),
+        pagination: {
+          page,
+          pageSize,
+          total,
+          hasMore: page * pageSize < total,
+        },
+      },
     );
   } catch (error) {
     console.error("Failed to load transactions:", error);

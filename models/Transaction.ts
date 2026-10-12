@@ -48,6 +48,8 @@ transactionSchema.index({
   createdAt: -1,
 });
 
+transactionSchema.index({ userId: 1, kind: 1, date: -1 });
+
 const Transaction =
   models.Transaction || model("Transaction", transactionSchema);
 
