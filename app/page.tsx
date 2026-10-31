@@ -43,14 +43,7 @@ const categories: Record<Kind, string[]> = {
     "Medical",
     "Other",
   ],
-  Investment: [
-    "Gold",
-    "Stocks",
-    "Mutual funds",
-    "FD",
-    "RD",
-    "Other investment",
-  ],
+  Investment: ["Gold", "House", "Mutual funds", "FD", "RD", "Other investment"],
 };
 
 function localDateString() {
