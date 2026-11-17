@@ -166,6 +166,19 @@ export default function DashboardPage() {
     [transactions, financialPeriod],
   );
 
+  function selectFinancialMonth(nextStart: string) {
+    setSelectedCycleStart(nextStart);
+    if (!user) return;
+
+    const nextPeriod = getFinancialPeriod(
+      user.cycleStartDay,
+      dateFromString(nextStart),
+    );
+    if (!date || date < nextPeriod.startDate || date > nextPeriod.endDate) {
+      setDate(nextPeriod.startDate);
+    }
+  }
+
   const totalIncome = periodTransactions
     .filter((t) => t.kind === "Income")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -215,6 +228,11 @@ export default function DashboardPage() {
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setError("Enter an amount greater than zero.");
+      return;
+    }
+
+    if (date < financialPeriod.startDate || date > financialPeriod.endDate) {
+      setError("Choose a date within the selected financial month.");
       return;
     }
 
@@ -355,7 +373,7 @@ export default function DashboardPage() {
                       2,
                       "0",
                     );
-                    setSelectedCycleStart(`${cycleMonth}-${cycleDay}`);
+                      selectFinancialMonth(`${cycleMonth}-${cycleDay}`);
                   }
                 }}
                 disabled={!selectedCycleStart}
@@ -364,8 +382,8 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedCycleStart((current) =>
-                    current ? shiftCycleStart(current, -1) : current,
+                  selectFinancialMonth(
+                    selectedCycleStart ? shiftCycleStart(selectedCycleStart, -1) : "",
                   )
                 }
                 disabled={!selectedCycleStart}
@@ -376,8 +394,8 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedCycleStart((current) =>
-                    current ? shiftCycleStart(current, 1) : current,
+                  selectFinancialMonth(
+                    selectedCycleStart ? shiftCycleStart(selectedCycleStart, 1) : "",
                   )
                 }
                 disabled={!selectedCycleStart}
@@ -538,7 +556,7 @@ export default function DashboardPage() {
 
             <div className="space-y-2">
               <label htmlFor="date" className="text-sm font-medium">
-                Date
+                Date in selected financial month
               </label>
               <input
                 id="date"
@@ -546,6 +564,8 @@ export default function DashboardPage() {
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                min={financialPeriod.startDate}
+                max={financialPeriod.endDate}
                 className="w-full rounded-lg border px-3 py-3"
               />
             </div>

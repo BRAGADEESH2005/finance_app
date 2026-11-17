@@ -40,6 +40,15 @@ function dateFromString(value: string) {
   return new Date(year, month - 1, day);
 }
 
+function shiftCycleStart(value: string, months: number) {
+  const date = dateFromString(value);
+  date.setMonth(date.getMonth() + months);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const loadingPeriod = {
   startDate: "",
   endDate: "",
@@ -157,6 +166,14 @@ function TransactionDetailsContent() {
       dateFromString(cycleStart),
     );
   }, [currentCycleStart, searchParams, user?.cycleStartDay]);
+  const selectedCycleStart =
+    searchParams.get("cycleStart") || currentCycleStart;
+
+  function selectFinancialMonth(month: string) {
+    if (!month) return;
+    const cycleDay = String(user?.cycleStartDay ?? 26).padStart(2, "0");
+    router.push(`/details/${type}?cycleStart=${month}-${cycleDay}`);
+  }
 
   const periodTransactions = useMemo(
     () =>
@@ -285,9 +302,42 @@ function TransactionDetailsContent() {
         </Link>
 
         <section className="rounded-2xl bg-slate-900 p-6 text-white">
-          <p className="text-sm text-slate-300">Financial period</p>
-          <h1 className="mt-2 text-2xl font-bold">{title}</h1>
-          <p className="mt-2 text-sm text-slate-300">{period.label}</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-slate-300">Financial period</p>
+              <h1 className="mt-2 text-2xl font-bold">{title}</h1>
+              <p className="mt-2 text-sm text-slate-300">{period.label}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2" aria-label="Financial month selection">
+              <label htmlFor="details-cycle-month" className="sr-only">
+                Select financial month
+              </label>
+              <input
+                id="details-cycle-month"
+                type="month"
+                value={selectedCycleStart.slice(0, 7)}
+                onChange={(event) => selectFinancialMonth(event.target.value)}
+                disabled={!selectedCycleStart}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => selectedCycleStart && router.push(`/details/${type}?cycleStart=${shiftCycleStart(selectedCycleStart, -1)}`)}
+                disabled={!selectedCycleStart}
+                className="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => selectedCycleStart && router.push(`/details/${type}?cycleStart=${shiftCycleStart(selectedCycleStart, 1)}`)}
+                disabled={!selectedCycleStart}
+                className="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
           {type === "Unallocated" ? (
             <div className="mt-5">
               <p className="text-sm text-slate-300">
