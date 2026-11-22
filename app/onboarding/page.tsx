@@ -21,6 +21,7 @@ function ordinal(day: number) {
 export default function OnboardingPage() {
   const router = useRouter();
   const [startDay, setStartDay] = useState(26);
+  const [creditCycleStartDay, setCreditCycleStartDay] = useState(18);
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -39,6 +40,7 @@ export default function OnboardingPage() {
 
         setUsername(user.username);
         setStartDay(user.cycleStartDay);
+        setCreditCycleStartDay(user.creditCycleStartDay ?? 18);
 
         const editing =
           new URLSearchParams(window.location.search).get("edit") === "1";
@@ -66,7 +68,7 @@ export default function OnboardingPage() {
       const response = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDay }),
+        body: JSON.stringify({ startDay, creditCycleStartDay }),
       });
 
       const data = await response.json();
@@ -117,6 +119,25 @@ export default function OnboardingPage() {
                 {ordinal(day)}
                 {day === 1 ? " — calendar month" : ""}
                 {day === 26 ? " — recommended for salary on the 25th" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="creditCycleStartDay" className="font-medium">
+            Which day should each credit-card cycle start?
+          </label>
+          <select
+            id="creditCycleStartDay"
+            value={creditCycleStartDay}
+            onChange={(e) => setCreditCycleStartDay(Number(e.target.value))}
+            className="w-full rounded-lg border bg-white px-3 py-3"
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+              <option key={day} value={day}>
+                {ordinal(day)}
+                {day === 18 ? " — recommended" : ""}
               </option>
             ))}
           </select>

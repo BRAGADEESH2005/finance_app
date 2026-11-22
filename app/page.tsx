@@ -6,7 +6,7 @@ import { getFinancialPeriod } from "@/lib/financial-period";
 import MobileNav from "@/components/mobile-nav";
 import LoadingState from "@/components/loading-state";
 
-type Kind = "Income" | "Expense" | "Investment";
+type Kind = "Income" | "Expense" | "Investment" | "Credit Card";
 
 type Transaction = {
   id: string;
@@ -21,6 +21,7 @@ type User = {
   id: string;
   username: string;
   cycleStartDay: number;
+  creditCycleStartDay: number;
   onboardingComplete: boolean;
 };
 
@@ -44,6 +45,7 @@ const categories: Record<Kind, string[]> = {
     "Other",
   ],
   Investment: ["Gold", "House", "Mutual funds", "FD", "RD", "Other investment"],
+  "Credit Card": ["Credit card purchase"],
 };
 
 function localDateString() {
@@ -98,6 +100,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCycleStart, setSelectedCycleStart] = useState("");
+  const [creditCardTotal, setCreditCardTotal] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -110,7 +113,10 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const response = await fetch("/api/dashboard");
+      const [response, creditResponse] = await Promise.all([
+        fetch("/api/dashboard"),
+        fetch("/api/credit-card-transactions"),
+      ]);
 
       if (response.status === 401) {
         router.replace("/login");
@@ -123,6 +129,9 @@ export default function DashboardPage() {
 
       const result: { user: User; transactions: Transaction[] } =
         await response.json();
+      const creditResult = creditResponse.ok
+        ? await creditResponse.json()
+        : { transactions: [] };
       const currentUser = result.user;
 
       if (!currentUser.onboardingComplete) {
@@ -136,6 +145,23 @@ export default function DashboardPage() {
       );
 
       setTransactions(result.transactions);
+      const creditTransactions = creditResult.transactions as Array<{
+        amount: number;
+        date: string;
+      }>;
+      setCreditCardTotal(
+        creditTransactions
+          .filter((transaction) => {
+            const period = getFinancialPeriod(
+              currentUser.creditCycleStartDay ?? 18,
+            );
+            return (
+              transaction.date >= period.startDate &&
+              transaction.date <= period.endDate
+            );
+          })
+          .reduce((sum, transaction) => sum + transaction.amount, 0),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -331,6 +357,14 @@ export default function DashboardPage() {
       color: "text-slate-900",
       description: "Income minus expenses and investments",
     },
+    {
+      title: "Credit-card spending",
+      kind: "CreditCard",
+      value: creditCardTotal,
+      symbol: "▭",
+      color: "text-violet-700",
+      description: "Purchases in the current card cycle",
+    },
   ];
 
   if (loading) {
@@ -455,15 +489,17 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {cards.map((card) => (
               <button
                 key={card.kind}
                 type="button"
                 onClick={() =>
-                  router.push(
-                    `/details/${card.kind}?cycleStart=${selectedCycleStart}`,
-                  )
+                  card.kind === "CreditCard"
+                    ? router.push("/credit-cards")
+                    : router.push(
+                        `/details/${card.kind}?cycleStart=${selectedCycleStart}`,
+                      )
                 }
                 className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
               >
@@ -510,6 +546,10 @@ export default function DashboardPage() {
                 value={kind}
                 onChange={(e) => {
                   const nextKind = e.target.value as Kind;
+                  if (nextKind === "Credit Card") {
+                    router.push("/credit-cards");
+                    return;
+                  }
                   setKind(nextKind);
                   setCategory(categories[nextKind][0]);
                 }}
@@ -518,6 +558,7 @@ export default function DashboardPage() {
                 {(["Income", "Expense", "Investment"] as Kind[]).map((item) => (
                   <option key={item}>{item}</option>
                 ))}
+                <option value="Credit Card">Credit Card</option>
               </select>
             </div>
 

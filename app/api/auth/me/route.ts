@@ -15,6 +15,7 @@ export async function GET() {
     id: String(user._id),
     username: user.username,
     cycleStartDay: user.cycleStartDay,
+    creditCycleStartDay: user.creditCycleStartDay ?? 18,
     onboardingComplete: user.onboardingComplete,
   });
 }

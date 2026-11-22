@@ -25,6 +25,12 @@ const userSchema = new Schema(
       max: 28,
       default: 26,
     },
+    creditCycleStartDay: {
+      type: Number,
+      min: 1,
+      max: 28,
+      default: 18,
+    },
     onboardingComplete: {
       type: Boolean,
       default: false,

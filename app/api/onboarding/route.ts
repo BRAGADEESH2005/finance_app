@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const startDay = Number(body.startDay);
+    const creditCycleStartDay = Number(body.creditCycleStartDay ?? 18);
 
     if (
       !Number.isInteger(startDay) ||
@@ -27,6 +28,16 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (
+      !Number.isInteger(creditCycleStartDay) ||
+      creditCycleStartDay < 1 ||
+      creditCycleStartDay > 28
+    ) {
+      return NextResponse.json(
+        { error: "Choose a credit-card cycle start day between 1 and 28." },
+        { status: 400 },
+      );
+    }
 
     await connectDB();
 
@@ -35,6 +46,7 @@ export async function POST(request: Request) {
       {
         $set: {
           cycleStartDay: startDay,
+          creditCycleStartDay,
           onboardingComplete: true,
         },
       }
